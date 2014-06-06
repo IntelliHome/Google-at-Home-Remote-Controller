@@ -2,10 +2,11 @@ package com.intellihome.googleathome.app;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.speech.RecognizerIntent;
-import android.support.v7.app.ActionBarActivity;
-import android.support.v4.app.Fragment;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.speech.RecognizerIntent;
+import android.support.v4.app.Fragment;
+import android.support.v7.app.ActionBarActivity;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
@@ -17,11 +18,13 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/* Thanks to https://github.com/BmanDesignsCanada/LiSpeakMobile */
+import org.alexd.jsonrpc.JSONRPCClient;
+import org.alexd.jsonrpc.JSONRPCException;
+import org.alexd.jsonrpc.JSONRPCParams;
 
-import com.loopj.android.http.AsyncHttpClient;
-import com.loopj.android.http.AsyncHttpResponseHandler;
 import java.util.ArrayList;
+
+/* Thanks to https://github.com/BmanDesignsCanada/LiSpeakMobile */
 
 public class MainActivity extends ActionBarActivity {
 
@@ -31,7 +34,7 @@ public class MainActivity extends ActionBarActivity {
 
     int VOICE_RECOGNITION_REQUEST_CODE = 125;
 
-    void showToast(String message){
+    void showToast(String message) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
@@ -46,19 +49,22 @@ public class MainActivity extends ActionBarActivity {
                     .commit();
         }
 
-        speak = (Button)findViewById(R.id.button1);
-        ipbox = (TextView)findViewById(R.id.txtIP);
-        prefs = getSharedPreferences("MainPrefs",MODE_MULTI_PROCESS);
-        ipbox.setText(prefs.getString("IP","0.0.0.0"));
+        speak = (Button) findViewById(R.id.button1);
+        ipbox = (TextView) findViewById(R.id.txtIP);
+        prefs = getSharedPreferences("MainPrefs", MODE_MULTI_PROCESS);
+        ipbox.setText(prefs.getString("IP", "0.0.0.0"));
         ipbox.addTextChangedListener(new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {}
+            public void beforeTextChanged(CharSequence charSequence, int i, int i2, int i3) {
+            }
+
             @Override
-            public void onTextChanged(CharSequence charSequence, int i, int i2, int i3) {}
+            public void onTextChanged(CharSequence charSequence, int i, int i2, int i3) {
+            }
 
             @Override
             public void afterTextChanged(Editable editable) {
-                prefs.edit().putString("IP",ipbox.getText().toString()).commit();
+                prefs.edit().putString("IP", ipbox.getText().toString()).commit();
             }
         });
         speak.setOnClickListener(new View.OnClickListener() {
@@ -76,7 +82,7 @@ public class MainActivity extends ActionBarActivity {
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         //Puts a customized message to the prompt
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT,"Talk");
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Talk");
         startActivityForResult(intent, VOICE_RECOGNITION_REQUEST_CODE);
     }
 
@@ -89,12 +95,10 @@ public class MainActivity extends ActionBarActivity {
             // Fill the list view with the strings the recognizer thought it could have heard
             ArrayList<String> matches = data.getStringArrayListExtra(
                     RecognizerIntent.EXTRA_RESULTS);
-            showToast(matches.get(0));
-
-            connect("http://" + ipbox.getText().toString() + ":45458/command/" + matches.get(0).replace(" ", "%20"));
-
-
-            //Turn on or off bluetooth here
+            String[] match = new String[matches.size()];
+            match = matches.toArray(match);
+            AsyncTaskRunner runner = new AsyncTaskRunner(); //Creating an async task to handle the RPC request
+            runner.execute(match);
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }
@@ -120,8 +124,6 @@ public class MainActivity extends ActionBarActivity {
         return super.onOptionsItemSelected(item);
     }
 
-
-
     /**
      * A placeholder fragment containing a simple view.
      */
@@ -137,13 +139,52 @@ public class MainActivity extends ActionBarActivity {
             return rootView;
         }
     }
-    public void connect(String url){
-        AsyncHttpClient client = new AsyncHttpClient();
-        client.get(url, new AsyncHttpResponseHandler() {
-            @Override
-            public void onSuccess(String response) {
-                System.out.println(response);
+
+    private class AsyncTaskRunner extends AsyncTask<String, String, String> {
+
+        private String resp;
+
+        @Override
+        protected String doInBackground(String... params) {
+            publishProgress("Sending your command to the server"); // Calls onProgressUpdate()
+            //Sending the RPC request
+            try {
+                JSONRPCClient client = JSONRPCClient.create("http://" + ipbox.getText().toString() + ":3000/parse", JSONRPCParams.Versions.VERSION_2);
+                client.setConnectionTimeout(2000);
+                client.setSoTimeout(2000);
+                String string = "Nothing Received";
+                try {
+                    string = client.callString("parse", params);
+                } catch (JSONRPCException e) {
+                    e.printStackTrace();
+                }
+                resp = string;
+            } catch (Exception e) {
+                e.printStackTrace();
+                resp = e.getMessage();
             }
-        });
+            return resp;
+        }
+
+        /*
+         * (non-Javadoc)
+         *
+         * @see android.os.AsyncTask#onPostExecute(java.lang.Object)
+         */
+        @Override
+        protected void onPostExecute(String result) {
+            // execution of result of Long time consuming operation
+            showToast(result);
+        }
+
+        /*
+         * (non-Javadoc)
+         *
+         * @see android.os.AsyncTask#onProgressUpdate(Progress[])
+         */
+        @Override
+        protected void onProgressUpdate(String... text) {
+            showToast(text[0]);
+        }
     }
 }
