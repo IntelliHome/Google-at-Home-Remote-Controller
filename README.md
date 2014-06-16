@@ -8,3 +8,4 @@ It is planned to control the domotic environment thru the app.
 
 Based on the LiSpeak mobile, but the communications thru the master uses the JSON RPC Client.
 
+![Google at Home Remote controller](http://www.mudler.pm/img/google_at_home_remote.png "Google at Home Remote controller")
